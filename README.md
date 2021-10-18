@@ -1,0 +1,2 @@
+# satskell
+SAT in Haskell!
