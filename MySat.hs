@@ -2,6 +2,7 @@ import CNF
 import CNF.DIMACS
 
 import qualified Solver.Naive as Naive
+import qualified Solver.Backtracking as Backtracking
 
 import Control.Monad
 import System.Environment
@@ -16,5 +17,8 @@ main = do
     exitFailure
   f <- readCNFfromDIMACS (args !! 0)
   case Naive.solution f of
+    Nothing  -> putStrLn "UNSAT"
+    Just rho -> putStrLn ("SAT\n" ++ dimacsSubst rho)
+  case Backtracking.solution f of
     Nothing  -> putStrLn "UNSAT"
     Just rho -> putStrLn ("SAT\n" ++ dimacsSubst rho)
