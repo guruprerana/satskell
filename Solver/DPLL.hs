@@ -1,4 +1,4 @@
-module Solver.Backtracking (solution) where
+module Solver.DPLL (solution) where
 
 import CNF
 import CNF.Eval
@@ -6,6 +6,10 @@ import Solver.Utils
 
 import Data.List
 import Data.Maybe
+
+-- performs unit propagation on the cnf
+UnitProp :: CNF -> (CNF, [Subst] -> [Subst])
+UnitProp cnf = undefined
 
 solutions :: CNF -> [Subst]
 solutions cnf = case clauses cnf of
