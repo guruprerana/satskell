@@ -1,4 +1,6 @@
-module Solver.Backtracking (solution) where
+module Solver.Backtracking
+  ( solution
+  ) where
 
 import CNF
 import CNF.Eval
@@ -8,18 +10,22 @@ import Data.List
 import Data.Maybe
 
 solutions :: CNF -> [Subst]
-solutions cnf = case clauses cnf of
-                  []    -> [[]] -- trivially satisfiable
-                  clss  -> case (BigOr []) `elem` clss of
-                            True  -> [] -- empty conjunction unsatisfiable
-                            False -> (addLit l $ solutions $ conditionCNF l cnf) 
-                                      ++ (addLit opl $ solutions $ conditionCNF opl cnf)
-                                        where
-                                          l   = head $ literals $ head clss
-                                          opl  = Lit (var l) (not $ pol l)
+solutions cnf =
+  case clauses cnf of
+    [] -> [[]] -- trivially satisfiable
+    clss ->
+      case (BigOr []) `elem` clss of
+        True -> [] -- empty conjunction unsatisfiable
+        False ->
+          (addLit l $ solutions $ conditionCNF l cnf) ++
+          (addLit opl $ solutions $ conditionCNF opl cnf)
+          where l = head $ literals $ head clss
+                opl = Lit (var l) (not $ pol l)
 
 -- we also add an extra filter to cross check we only have correct solutions (for testing)
 solution :: CNF -> Maybe Subst
-solution frm = case filter (\rho -> evalCNF rho frm) $ completeSolutions (vars frm) $ solutions frm of
-                []      -> Nothing
-                (rho:_) -> Just rho
+solution frm =
+  case filter (\rho -> evalCNF rho frm) $
+       completeSolutions (vars frm) $ solutions frm of
+    [] -> Nothing
+    (rho:_) -> Just rho

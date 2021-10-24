@@ -1,4 +1,8 @@
-module CNF.DIMACS (readCNFfromDIMACS, writeCNFtoDIMACS, dimacsSubst) where
+module CNF.DIMACS
+  ( readCNFfromDIMACS
+  , writeCNFtoDIMACS
+  , dimacsSubst
+  ) where
 
 import CNF
 
@@ -12,13 +16,14 @@ pos :: Parser Int
 pos = do
   x <- satisfy (\c -> c >= '1' && c <= '9')
   xs <- many digit
-  return (read (x:xs))
+  return (read (x : xs))
 
 -- parse a non-zero integer
 int :: Parser Int
-int = do char '-'
-         n <- pos
-         return (-n)
+int =
+  do char '-'
+     n <- pos
+     return (-n)
      <|> pos
 
 -- parse a literal with variables in range 1..n
@@ -28,8 +33,10 @@ lit n = do
   k <- int
   spaces
   let v = abs k
-  if v > n then unexpected ("variable " ++ show v ++ " out of bounds (" ++ show n ++ ")")
-  else return (Lit v (v == k))
+  if v > n
+    then unexpected
+           ("variable " ++ show v ++ " out of bounds (" ++ show n ++ ")")
+    else return (Lit v (v == k))
 
 -- parse a clause with variables in range 1..n
 cls :: Int -> Parser Cls
@@ -53,9 +60,10 @@ dimacs = do
   m <- pos
   spaces
   cs <- manyTill (cls n) eof
-  if length cs /= m then
-    unexpected (show (length cs) ++ " clauses found but expected " ++ show m)
-  else return (BigAnd [1..n] cs)
+  if length cs /= m
+    then unexpected
+           (show (length cs) ++ " clauses found but expected " ++ show m)
+    else return (BigAnd [1 .. n] cs)
 
 readCNFfromDIMACS :: FilePath -> IO CNF
 readCNFfromDIMACS file = do
@@ -67,15 +75,20 @@ readCNFfromDIMACS file = do
       error ("readDIMACS: parse error")
 
 dimacsLit :: Lit -> String
-dimacsLit (Lit v b) = (if b then "" else "-") ++ show v
+dimacsLit (Lit v b) =
+  (if b
+     then ""
+     else "-") ++
+  show v
 
 dimacsCls :: Cls -> String
 dimacsCls c = foldr (\l s -> dimacsLit l ++ " " ++ s) "0" (literals c)
 
 dimacsCNF :: CNF -> String
 dimacsCNF f =
-  "p cnf " ++ show n ++ " " ++ show k ++ "\n" ++
-  concatMap (\c -> dimacsCls c ++ "\n") (clauses f)
+  "p cnf " ++
+  show n ++
+  " " ++ show k ++ "\n" ++ concatMap (\c -> dimacsCls c ++ "\n") (clauses f)
   where
     n = length (vars f)
     k = length (clauses f)
@@ -87,5 +100,5 @@ writeCNFtoDIMACS file f = do
   hClose h
   return ()
 
-dimacsSubst :: [(Var,Bool)] -> String
-dimacsSubst rho = intercalate " " [dimacsLit (Lit v b) | (v,b) <- rho]
+dimacsSubst :: [(Var, Bool)] -> String
+dimacsSubst rho = intercalate " " [dimacsLit (Lit v b) | (v, b) <- rho]
