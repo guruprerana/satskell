@@ -41,3 +41,7 @@ completeSbst (x:xs) sbst = if ((x, True) `elem` sbst) || ((x, False) `elem` sbst
 -- when we only have partial assignments, we can complete them
 completeSolutions :: [Var] -> [Subst] -> [Subst]
 completeSolutions vars sbsts = map (completeSbst vars) sbsts
+
+-- checks if literal is present in any clause of frm
+isLitIn :: CNF -> Lit -> Bool
+isLitIn cnf l = or $ map ((l `elem`) . literals) $ clauses cnf
