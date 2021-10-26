@@ -18,7 +18,16 @@ You can use the following command to run satskell and check the satisfiability o
 ./MySat <dimacs-file-name> <method>
 ```
 
-where `<method>` is one of `backtracking`, `dpll`, or `cdcl`.
+where `<method>` is one of `naive`, `backtracking`, `dpll`, or `cdcl`.
+
+## Implementation remarks
+
+- Each algorithm is written in separate modules found within `Solver/`.
+- A few common functions are shared between the backtracking and DPLL implementations which are in the `Solver.Utils` module
+- *Basic Backtracking*: Simple to write functionally!
+- *DPLL*: Still pretty easy to implement unit propagation and pure literal elimination
+- *CDCL*: With the DPLL implementation, we see that we have to pass around updated clauses and variables between functions which gets cumbersome very quickly especially when we have to deal with non-synchronous backtracking in CDCL. This is why we switch to a monadic style implementation of CDCL with the `State` monad in Haskell which helps us keep a track of the current implication graph and assignments by mutating it at different points.
+- It is very interesting to note that with the monadic style, we can closely match imperative programming style which you can observe if you look at the `cdcl` and `assignVariables` functions in `Solver.CDCL` which almost correspond line by line to the pseudocode of the CDCL algorithm presented [here](https://www.cs.princeton.edu/~zkincaid/courses/fall18/readings/SATHandbook-CDCL.pdf)
 
 ## Comparison of algoritms
 
@@ -36,4 +45,4 @@ We test our implementations against [Minisat](https://github.com/niklasso/minisa
     - Chapter 4 of this [Handbook of Satisifiability](https://www.cs.princeton.edu/~zkincaid/courses/fall18/readings/SATHandbook-CDCL.pdf)
     - Helped [visualize CDCL](https://cse442-17f.github.io/Conflict-Driven-Clause-Learning/).
     - [GRASP - A New Search Algorithm for Satisfiability](https://www.cs.cmu.edu/~emc/15-820A/reading/grasp_iccad96.pdf)
-2. For the implementation of the VSIDS heuristic for branching these [lecture slides](https://baldur.iti.kit.edu/sat/files/2019/l08.pdf) were of great help
+2. For the implementation of the VSIDS heuristic for branching these [lecture slides](https://baldur.iti.kit.edu/sat/files/2019/l08.pdf) are of great help
