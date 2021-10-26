@@ -47,7 +47,8 @@ TODO: Add table comparing timings of different algorithms vs. Minisat
     - Chapter 4 of this [Handbook of Satisifiability](https://www.cs.princeton.edu/~zkincaid/courses/fall18/readings/SATHandbook-CDCL.pdf)
     - Helped [visualize CDCL](https://cse442-17f.github.io/Conflict-Driven-Clause-Learning/).
     - [GRASP - A New Search Algorithm for Satisfiability](https://www.cs.cmu.edu/~emc/15-820A/reading/grasp_iccad96.pdf)
-2. For the implementation of the VSIDS heuristic for branching these [lecture slides](https://baldur.iti.kit.edu/sat/files/2019/l08.pdf) are of great help
+2. For the implementation of the VSIDS heuristic for branching these [lecture slides](https://baldur.iti.kit.edu/sat/files/2019/l08.pdf) could be of great help
+3. Gives a great overview of everything one can have in a SAT Solver: [The Quest for Efficient Boolean Satisfiability Solvers](https://www.princeton.edu/~chaff/publication/cade_cav_2002.pdf)
 
 ### Code formatting
 
