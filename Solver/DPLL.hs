@@ -11,10 +11,16 @@ import Data.Maybe
 
 -- performs unit propagation on the cnf
 unitProp :: CNF -> (CNF, [Subst] -> [Subst])
-unitProp cnf = (conditionsCNF ls cnf, addLits ls)
+unitProp cnf =
+  case unitLits of
+    [] -> (cnf, id)
+    ls ->
+      let (reccnf, recadd) = unitProp $ conditionsCNF ls cnf
+       in (reccnf, recadd . addLits ls)
   where
-    ls :: [Lit]
-    ls = map firstLit $ filter (\(BigOr lits) -> length lits == 1) $ clauses cnf
+    unitLits :: [Lit]
+    unitLits =
+      map firstLit $ filter (\(BigOr lits) -> length lits == 1) $ clauses cnf
     firstLit :: Cls -> Lit
     firstLit = head . literals
 

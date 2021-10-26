@@ -252,8 +252,8 @@ backtrack d = do
 -- loops until all the variables are assigned or there is a conflict which is unresolvable
 assignVariables :: State CLG ()
 assignVariables = do
-  -- can explore with different heuristics for picking the branching variable
   mi <- pickBranchingVariable
+  -- can explore with different heuristics for picking the branching variable
   case mi of
     Nothing -> return () -- no more variables left to assign
     Just i -> do
