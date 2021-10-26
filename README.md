@@ -48,3 +48,7 @@ TODO: Add table comparing timings of different algorithms vs. Minisat
     - Helped [visualize CDCL](https://cse442-17f.github.io/Conflict-Driven-Clause-Learning/).
     - [GRASP - A New Search Algorithm for Satisfiability](https://www.cs.cmu.edu/~emc/15-820A/reading/grasp_iccad96.pdf)
 2. For the implementation of the VSIDS heuristic for branching these [lecture slides](https://baldur.iti.kit.edu/sat/files/2019/l08.pdf) are of great help
+
+### Code formatting
+
+We are using `hindent` to format our Haskell source code with the configuration file `.hindent.yaml`.
