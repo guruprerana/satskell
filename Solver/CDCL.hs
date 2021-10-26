@@ -142,7 +142,8 @@ inferLit (l, cls) = do
   clg <- get
   put (updateVals (l, cls) clg)
   -- go through each clause and check it with checkCls
-  mapM checkCls $ clss clg
+  clg' <- get
+  mapM checkCls $ clss clg'
   return ()
 
 -- repeatedly looks for and resolves wrt unit clauses
@@ -150,10 +151,9 @@ unitProp :: State CLG ()
 unitProp = do
   clg <- get
   -- if we have an unsatisfied clause, then we have a conflict!
-  case (length $ unassigned clg, unsatCls clg) of
-    (_, Just cls) -> return ()
-    (0, Nothing) -> return ()
-    (_, Nothing) -> do
+  case unsatCls clg of
+    Just cls -> return ()
+    Nothing -> do
       case unitCls clg of
         Nothing -> return ()
         Just (l, cls) -> do
@@ -187,19 +187,27 @@ declevi clg i = snd $ head $ filter (\(i', _) -> i == i') (declevs clg)
 -- compute the learned clause given the conflict clause by recursive resolution
 learnedClause :: CLG -> Cls -> Cls
 learnedClause clg cls =
-  if nLitsDeclev > 1
+  if nLitsDeclev > 0
     then (learnedClause clg (resolution cls anteCls))
     else cls
   where
     anteCls =
       case anteClsM of
-        Nothing -> error ("ANTECLS NOTHING: not possible in the usual flow")
+        Nothing ->
+          error
+            ("ANTECLS NOTHING: not possible in the usual flow " ++
+             (show $ map (declevi clg) litsDeclev))
         Just cls -> cls
     anteClsM = (ante clg) $ head litsDeclev
     litsDeclev =
-      map (\(Lit i _) -> i) $
-      filter (\(Lit i _) -> (declevi clg i) == (declev clg)) (literals cls)
+      filter (\i -> (declevi clg i) == (declev clg) && (ante clg) i /= Nothing) $
+      map (\(Lit i _) -> i) (literals cls)
     nLitsDeclev = length litsDeclev
+
+-- computes lowest decision level of the vars in a given clause
+lowestDecLevel :: CLG -> Cls -> Int
+lowestDecLevel clg cls =
+  minimum $ map (declevi clg) $ map (\(Lit i _) -> i) (literals cls)
 
 -- compute and add the learned clause
 conflictAnalysis :: Cls -> State CLG Int
@@ -208,10 +216,6 @@ conflictAnalysis cls = do
   put (clg {clss = (learnedClause clg cls) : (clss clg)})
   clg' <- get
   return $ lowestDecLevel clg' $ head $ clss clg'
-  where
-    lowestDecLevel :: CLG -> Cls -> Int
-    lowestDecLevel clg cls =
-      minimum $ map (declevi clg) $ map (\(Lit i _) -> i) (literals cls)
 
 removeVal :: Var -> CLG -> CLG
 removeVal i clg =
@@ -248,18 +252,19 @@ backtrack d = do
 -- loops until all the variables are assigned or there is a conflict which is unresolvable
 assignVariables :: State CLG ()
 assignVariables = do
-  clg <- get
   -- can explore with different heuristics for picking the branching variable
   mi <- pickBranchingVariable
   case mi of
     Nothing -> return () -- no more variables left to assign
     Just i -> do
+      clg <- get
       put (clg {declev = (declev clg) + 1})
       -- we assign decision variables to be false by default
       -- can experiment with random assignment?
       inferLit (Lit i False, Nothing)
       unitProp
-      case unsatCls clg of
+      clg1 <- get
+      case unsatCls clg1 of
         Nothing
           -- no conflicts! go ahead and assign other variables
          -> do
@@ -268,15 +273,20 @@ assignVariables = do
           backtrackLevel <- conflictAnalysis cls
           if backtrackLevel < 0
             then return () -- unsat
-              -- else backtrack
+              -- else we want to backtrack
             else do
+              clg2 <- get
               put
-                (clg
+                (clg2
                    { declev = backtrackLevel
                    , unsatCls = Nothing
                    , unitCls = Nothing
                    })
               backtrack backtrackLevel
+              -- check and update unsatCls/unitCls because new ones could be created
+              -- after the added clause
+              clg3 <- get
+              mapM checkCls $ clss clg3
               unitProp
               assignVariables
               return ()
