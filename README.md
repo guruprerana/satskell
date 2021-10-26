@@ -33,6 +33,8 @@ where `<method>` is one of `naive`, `backtracking`, `dpll`, or `cdcl`.
 
 We test our implementations against [Minisat](https://github.com/niklasso/minisat)!
 
+TODO: Add table comparing timings of different algorithms vs. Minisat
+
 ## In the future?
 
 1. Complete the implementation of the VSIDS branching heuristic
