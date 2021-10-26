@@ -61,7 +61,7 @@ initialCLG cnf =
     , vals = \_ -> Undef
     , ante = \_ -> Nothing
     , declev = -1
-    , declevs = []
+    , declevs = [(i, -1) | i <- (vars cnf)]
     , ncls = length $ clauses cnf
     , clss = clauses cnf
     , clscharac = \_ -> Unres
@@ -169,11 +169,79 @@ pickBranchingVariable = do
     [] -> return Nothing
     i:_ -> return $ Just i
 
+-- For two clauses ω_j and ω_k, for which there is a unique variable x such that one clause has a literal
+-- x and the other has literal ¬x, resolution ω_j ω_k contains all the literals of ω_j and ω_k with
+-- the exception of x and ¬x.
+resolution :: Cls -> Cls -> Cls
+resolution (BigOr ls1) (BigOr ls2) = BigOr ((ls1 ++ ls2) \\ [l, opl l])
+  where
+    l :: Lit
+    l = head $ filter ((`elem` ls2) . opl) ls1
+    opl :: Lit -> Lit
+    opl (Lit i pol) = Lit i (not pol)
+
+-- compute decision level of a variable
+declevi :: CLG -> Var -> Int
+declevi clg i = snd $ head $ filter (\(i', _) -> i == i') (declevs clg)
+
+-- compute the learned clause given the conflict clause by recursive resolution
+learnedClause :: CLG -> Cls -> Cls
+learnedClause clg cls =
+  if nLitsDeclev > 1
+    then (learnedClause clg (resolution cls anteCls))
+    else cls
+  where
+    anteCls =
+      case anteClsM of
+        Nothing -> error ("ANTECLS NOTHING: not possible in the usual flow")
+        Just cls -> cls
+    anteClsM = (ante clg) $ head litsDeclev
+    litsDeclev =
+      map (\(Lit i _) -> i) $
+      filter (\(Lit i _) -> (declevi clg i) == (declev clg)) (literals cls)
+    nLitsDeclev = length litsDeclev
+
 conflictAnalysis :: Cls -> State CLG Int
-conflictAnalysis = undefined
+conflictAnalysis cls = do
+  clg <- get
+  put (clg {clss = (learnedClause clg cls) : (clss clg)})
+  clg' <- get
+  return $ lowestDecLevel clg' $ head $ clss clg'
+  where
+    lowestDecLevel :: CLG -> Cls -> Int
+    lowestDecLevel clg cls =
+      minimum $ map (declevi clg) $ map (\(Lit i _) -> i) (literals cls)
+
+removeVal :: Var -> CLG -> CLG
+removeVal i clg =
+  clg
+    { unassigned = i : (unassigned clg)
+    , vals =
+        \i' ->
+          if i' == i
+            then Undef
+            else (vals clg) i'
+    , ante =
+        \i' ->
+          if i' == i
+            then Nothing
+            else (ante clg) i'
+    , declevs = tail $ declevs clg
+    }
 
 backtrack :: Int -> State CLG ()
-backtrack = undefined
+backtrack d = do
+  clg <- get
+  case declevs clg of
+    [] -> return ()
+    (i, d'):declevis ->
+      if d' < d
+        then return ()
+        else case (d', (ante clg) i) of
+               (d, Nothing) -> return () -- don't need to backtrack the last decision variable
+               otherwise -> do
+                 put (removeVal i clg)
+                 return ()
 
 -- loops until all the variables are assigned or there is a conflict which is unresolvable
 assignVariables :: State CLG ()
@@ -190,16 +258,22 @@ assignVariables = do
       inferLit (Lit i False, Nothing)
       unitProp
       case unsatCls clg of
-        Nothing -> do
+        Nothing
           -- no conflicts! go ahead and assign other variables
+         -> do
           assignVariables
         Just cls -> do
           backtrackLevel <- conflictAnalysis cls
           if backtrackLevel < 0
             then return () -- unsat
-            else do
               -- else backtrack
-              put (clg {declev = backtrackLevel})
+            else do
+              put
+                (clg
+                   { declev = backtrackLevel
+                   , unsatCls = Nothing
+                   , unitCls = Nothing
+                   })
               backtrack backtrackLevel
               unitProp
               assignVariables
@@ -216,5 +290,19 @@ cdcl = do
       assignVariables
       return ()
 
+constructSubst :: (Var -> VarVal) -> [Var] -> Subst
+constructSubst vals vars = zip vars $ map (convert . vals) vars
+  where
+    convert :: VarVal -> Bool
+    convert One = True
+    convert Zero = False
+    convert Undef = error ("UNDEF VAR while constructing substitution")
+
+getSolution :: [Var] -> CLG -> Maybe Subst
+getSolution vars clg =
+  case unsatCls clg of
+    Nothing -> Just $ constructSubst (vals clg) vars
+    Just _ -> Nothing
+
 solution :: CNF -> Maybe Subst
-solution = undefined
+solution cnf = getSolution (vars cnf) $ snd $ runState cdcl $ initialCLG cnf
