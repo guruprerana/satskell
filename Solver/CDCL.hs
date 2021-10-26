@@ -201,6 +201,7 @@ learnedClause clg cls =
       filter (\(Lit i _) -> (declevi clg i) == (declev clg)) (literals cls)
     nLitsDeclev = length litsDeclev
 
+-- compute and add the learned clause
 conflictAnalysis :: Cls -> State CLG Int
 conflictAnalysis cls = do
   clg <- get
@@ -234,13 +235,14 @@ backtrack d = do
   clg <- get
   case declevs clg of
     [] -> return ()
-    (i, d'):declevis ->
+    (i, d'):_ ->
       if d' < d
         then return ()
         else case (d', (ante clg) i) of
                (d, Nothing) -> return () -- don't need to backtrack the last decision variable
                otherwise -> do
                  put (removeVal i clg)
+                 backtrack d
                  return ()
 
 -- loops until all the variables are assigned or there is a conflict which is unresolvable
