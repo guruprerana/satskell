@@ -6,7 +6,7 @@ import CNF
 
 import Control.Monad.State
 
-import Data.Heap as Heap (MaxPrioHeap, empty, fromList, insert, view)
+import Data.Heap as Heap (MaxPrioHeap, empty, fromList, insert, view, filter)
 
 -- import CNF.Eval
 -- import Solver.Utils
@@ -20,6 +20,11 @@ data VarVal
   | Undef
   | One
   deriving (Show, Eq)
+
+switchVarVal :: VarVal -> VarVal
+switchVarVal Zero = One
+switchVarVal Undef = Undef
+switchVarVal One = Zero
 
 -- a clause is either unsatified, satisfied, unit, or unresolved
 data ClsCharac
@@ -61,7 +66,7 @@ data CLG =
 initScore :: CNF -> Var -> Int
 initScore cnf i =
   length $
-  filter (\(BigOr ls) -> (Lit i True) `elem` ls || (Lit i False) `elem` ls) $
+  Prelude.filter (\(BigOr ls) -> (Lit i True) `elem` ls || (Lit i False) `elem` ls) $
   clauses cnf
 
 -- initializes the CLG with the initial required state given a CNF
@@ -80,7 +85,7 @@ initialCLG cnf =
     , clscharac = \_ -> Unres
     , unsatCls = Nothing
     , unitCls =
-        case filter (\(BigOr ls) -> length ls == 1) $ clauses cnf of
+        case Prelude.filter (\(BigOr ls) -> length ls == 1) $ clauses cnf of
           [] -> Nothing
           cls@(BigOr ls):_ -> Just (head ls, cls)
     }
@@ -99,7 +104,7 @@ evalCls clg (BigOr ls) = or $ map (evalLit clg) ls
 
 -- list of undefined lits in a clause
 undefLitsCls :: CLG -> Cls -> [Lit]
-undefLitsCls clg (BigOr ls) = filter (\(Lit i _) -> ((vals clg) i) == Undef) ls
+undefLitsCls clg (BigOr ls) = Prelude.filter (\(Lit i _) -> ((vals clg) i) == Undef) ls
 
 -- characterizes a clause and also returns a literal if it is a unit clause
 characCls :: CLG -> Cls -> (ClsCharac, Maybe Lit)
@@ -130,6 +135,7 @@ updateVals ((Lit i pol), cls) clg =
             else (ante clg) i'
     , declevs = (i, declev clg) : (declevs clg)
     , unitCls = Nothing
+    , varsHeap = Heap.filter (\(_, i') -> i' /= i) (varsHeap clg)
     }
 
 -- given a clause, it updates the clg after checking the clause
@@ -180,23 +186,23 @@ pickBranchingVariable = do
   case Heap.view $ varsHeap clg of
     Nothing -> return Nothing
     Just ((prio, var), tail) -> do
-      put (clg {varsHeap = tail})
+      --put (clg {varsHeap = tail})
       return $ Just var
 
 -- For two clauses ω_j and ω_k, for which there is a unique variable x such that one clause has a literal
 -- x and the other has literal ¬x, resolution ω_j ω_k contains all the literals of ω_j and ω_k with
 -- the exception of x and ¬x.
 resolution :: Cls -> Cls -> Cls
-resolution (BigOr ls1) (BigOr ls2) = BigOr ((ls1 ++ ls2) \\ [l, opl l])
+resolution (BigOr ls1) (BigOr ls2) = BigOr ((union ls1 ls2) \\ [l, opl l])
   where
     l :: Lit
-    l = head $ filter ((`elem` ls2) . opl) ls1
+    l = head $ Prelude.filter ((`elem` ls2) . opl) ls1
     opl :: Lit -> Lit
     opl (Lit i pol) = Lit i (not pol)
 
 -- compute decision level of a variable
 declevi :: CLG -> Var -> Int
-declevi clg i = snd $ head $ filter (\(i', _) -> i == i') (declevs clg)
+declevi clg i = snd $ head $ Prelude.filter (\(i', _) -> i == i') (declevs clg)
 
 -- compute the learned clause given the conflict clause by recursive resolution
 learnedClause :: CLG -> Cls -> Cls
@@ -214,14 +220,16 @@ learnedClause clg cls =
         Just cls -> cls
     anteClsM = (ante clg) $ head litsDeclev
     litsDeclev =
-      filter (\i -> (declevi clg i) == (declev clg) && (ante clg) i /= Nothing) $
+      Prelude.filter (\i -> (declevi clg i) == (declev clg) && (ante clg) i /= Nothing) $
       map (\(Lit i _) -> i) (literals cls)
     nLitsDeclev = length litsDeclev
 
 -- computes lowest decision level of the vars in a given clause
 lowestDecLevel :: CLG -> Cls -> Int
 lowestDecLevel clg cls =
-  minimum $ map (declevi clg) $ map (\(Lit i _) -> i) (literals cls)
+  case Prelude.filter (\d -> d /= (declev clg)) $ map (declevi clg) $ Prelude.filter (\i -> (ante clg) i == Nothing) $ map (\(Lit i _) -> i) (literals cls) of
+    [] -> (declev clg) - 1
+    ls -> maximum ls
 
 -- compute and add the learned clause
 conflictAnalysis :: Cls -> State CLG Int
@@ -229,7 +237,7 @@ conflictAnalysis cls = do
   clg <- get
   put (clg {clss = (learnedClause clg cls) : (clss clg)})
   clg' <- get
-  return $ lowestDecLevel clg' $ head $ clss clg'
+  return ((declev clg') - 1)-- $ lowestDecLevel clg' $ head $ clss clg'
 
 removeVal :: Var -> CLG -> CLG
 removeVal i clg =
@@ -262,6 +270,7 @@ incrementScores cls = do
   clg <- get
   put (clg {varScores = incrementScoresLits (literals cls) (varScores clg)})
 
+-- backtracks to decision level d without changing the decision assignment at level d
 backtrack :: Int -> State CLG ()
 backtrack d = do
   clg <- get
@@ -270,12 +279,50 @@ backtrack d = do
     (i, d'):_ ->
       if d' < d
         then return ()
-        else case (d', (ante clg) i) of
-               (d, Nothing) -> return () -- don't need to backtrack the last decision variable
-               otherwise -> do
-                 put (removeVal i clg)
-                 backtrack d
-                 return ()
+        else 
+          if (d' == d && ((ante clg) i) == Nothing) 
+          then return () -- we do not need to change anything at the decision assignment
+          else do
+            put (removeVal i clg)
+            backtrack d
+            return ()
+
+-- UNUSED : SWITCHES VALUE OF A VARIABLE used in normal backtracking
+switchDec :: Var -> State CLG ()
+switchDec i = do
+  clg <- get
+  put (clg {
+    vals = \i' -> if i' == i then switchVarVal $ (vals clg) i' else (vals clg) i'
+  })
+
+checkCLG :: State CLG ()
+checkCLG = do
+  unitProp
+  clg <- get
+  case unsatCls clg of
+    Nothing
+      -- no conflicts! go ahead and assign other variables
+     -> do
+      assignVariables
+    Just cls
+      -- we have a conflict clause so increment scores
+     -> do
+      incrementScores cls
+      backtrackLevel <- conflictAnalysis cls
+      if backtrackLevel <= 0
+        then return () -- unsat
+          -- else we want to backtrack
+        else do
+          clg1 <- get
+          put
+            (clg1
+               {declev = backtrackLevel, unsatCls = Nothing, unitCls = Nothing})
+          backtrack backtrackLevel
+          -- check and update unsatCls/unitCls because new ones could be created
+          -- after the added clause
+          clg3 <- get
+          mapM checkCls $ clss clg3
+          checkCLG
 
 -- loops until all the variables are assigned or there is a conflict which is unresolvable
 assignVariables :: State CLG ()
@@ -290,37 +337,7 @@ assignVariables = do
       -- we assign decision variables to be false by default
       -- can experiment with random assignment?
       inferLit (Lit i False, Nothing)
-      unitProp
-      clg1 <- get
-      case unsatCls clg1 of
-        Nothing
-          -- no conflicts! go ahead and assign other variables
-         -> do
-          assignVariables
-        Just cls
-          -- we have a conflict clause so increment scores
-         -> do
-          incrementScores cls
-          backtrackLevel <- conflictAnalysis cls
-          if backtrackLevel < 0
-            then return () -- unsat
-              -- else we want to backtrack
-            else do
-              clg2 <- get
-              put
-                (clg2
-                   { declev = backtrackLevel
-                   , unsatCls = Nothing
-                   , unitCls = Nothing
-                   })
-              backtrack backtrackLevel
-              -- check and update unsatCls/unitCls because new ones could be created
-              -- after the added clause
-              clg3 <- get
-              mapM checkCls $ clss clg3
-              unitProp
-              assignVariables
-              return ()
+      checkCLG
 
 cdcl :: State CLG ()
 cdcl = do
