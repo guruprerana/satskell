@@ -6,12 +6,12 @@ import CNF
 
 import Control.Monad.State
 
-import Data.Heap as Heap (MaxPrioHeap, empty, fromList, insert, view, filter)
+import Data.Heap as Heap (MaxPrioHeap, empty, filter, fromList, insert, view)
 
 -- import CNF.Eval
 -- import Solver.Utils
 import Data.List
-import qualified Data.Map as Map
+import Data.Map as Map (Map, findWithDefault, fromAscList, insert)
 import Data.Maybe
 
 -- the current assignement for a var can be either Zero (False), undefined, or One (True)
@@ -66,7 +66,8 @@ data CLG =
 initScore :: CNF -> Var -> Int
 initScore cnf i =
   length $
-  Prelude.filter (\(BigOr ls) -> (Lit i True) `elem` ls || (Lit i False) `elem` ls) $
+  Prelude.filter
+    (\(BigOr ls) -> (Lit i True) `elem` ls || (Lit i False) `elem` ls) $
   clauses cnf
 
 -- initializes the CLG with the initial required state given a CNF
@@ -104,7 +105,8 @@ evalCls clg (BigOr ls) = or $ map (evalLit clg) ls
 
 -- list of undefined lits in a clause
 undefLitsCls :: CLG -> Cls -> [Lit]
-undefLitsCls clg (BigOr ls) = Prelude.filter (\(Lit i _) -> ((vals clg) i) == Undef) ls
+undefLitsCls clg (BigOr ls) =
+  Prelude.filter (\(Lit i _) -> ((vals clg) i) == Undef) ls
 
 -- characterizes a clause and also returns a literal if it is a unit clause
 characCls :: CLG -> Cls -> (ClsCharac, Maybe Lit)
@@ -185,8 +187,9 @@ pickBranchingVariable = do
   clg <- get
   case Heap.view $ varsHeap clg of
     Nothing -> return Nothing
-    Just ((prio, var), tail) -> do
+    Just ((prio, var), tail)
       --put (clg {varsHeap = tail})
+     -> do
       return $ Just var
 
 -- For two clauses ω_j and ω_k, for which there is a unique variable x such that one clause has a literal
@@ -220,14 +223,18 @@ learnedClause clg cls =
         Just cls -> cls
     anteClsM = (ante clg) $ head litsDeclev
     litsDeclev =
-      Prelude.filter (\i -> (declevi clg i) == (declev clg) && (ante clg) i /= Nothing) $
+      Prelude.filter
+        (\i -> (declevi clg i) == (declev clg) && (ante clg) i /= Nothing) $
       map (\(Lit i _) -> i) (literals cls)
     nLitsDeclev = length litsDeclev
 
 -- computes lowest decision level of the vars in a given clause
 lowestDecLevel :: CLG -> Cls -> Int
 lowestDecLevel clg cls =
-  case Prelude.filter (\d -> d /= (declev clg)) $ map (declevi clg) $ Prelude.filter (\i -> (ante clg) i == Nothing) $ map (\(Lit i _) -> i) (literals cls) of
+  case Prelude.filter (\d -> d /= (declev clg)) $
+       map (declevi clg) $
+       Prelude.filter (\i -> (ante clg) i == Nothing) $
+       map (\(Lit i _) -> i) (literals cls) of
     [] -> (declev clg) - 1
     ls -> maximum ls
 
@@ -237,7 +244,7 @@ conflictAnalysis cls = do
   clg <- get
   put (clg {clss = (learnedClause clg cls) : (clss clg)})
   clg' <- get
-  return ((declev clg') - 1)-- $ lowestDecLevel clg' $ head $ clss clg'
+  return ((declev clg') - 1) -- $ lowestDecLevel clg' $ head $ clss clg'
 
 removeVal :: Var -> CLG -> CLG
 removeVal i clg =
@@ -279,21 +286,25 @@ backtrack d = do
     (i, d'):_ ->
       if d' < d
         then return ()
-        else 
-          if (d' == d && ((ante clg) i) == Nothing) 
-          then return () -- we do not need to change anything at the decision assignment
-          else do
-            put (removeVal i clg)
-            backtrack d
-            return ()
+        else if (d' == d && ((ante clg) i) == Nothing)
+               then return () -- we do not need to change anything at the decision assignment
+               else do
+                 put (removeVal i clg)
+                 backtrack d
+                 return ()
 
 -- UNUSED : SWITCHES VALUE OF A VARIABLE used in normal backtracking
 switchDec :: Var -> State CLG ()
 switchDec i = do
   clg <- get
-  put (clg {
-    vals = \i' -> if i' == i then switchVarVal $ (vals clg) i' else (vals clg) i'
-  })
+  put
+    (clg
+       { vals =
+           \i' ->
+             if i' == i
+               then switchVarVal $ (vals clg) i'
+               else (vals clg) i'
+       })
 
 checkCLG :: State CLG ()
 checkCLG = do
@@ -320,8 +331,8 @@ checkCLG = do
           backtrack backtrackLevel
           -- check and update unsatCls/unitCls because new ones could be created
           -- after the added clause
-          clg3 <- get
-          mapM checkCls $ clss clg3
+          clg2 <- get
+          mapM checkCls $ clss clg2
           checkCLG
 
 -- loops until all the variables are assigned or there is a conflict which is unresolvable
