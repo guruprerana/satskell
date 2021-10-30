@@ -6,9 +6,12 @@ import CNF
 
 import Control.Monad.State
 
+import Data.Heap as Heap (MaxPrioHeap, empty, fromList, insert, view)
+
 -- import CNF.Eval
 -- import Solver.Utils
 import Data.List
+import qualified Data.Map as Map
 import Data.Maybe
 
 -- the current assignement for a var can be either Zero (False), undefined, or One (True)
@@ -29,7 +32,8 @@ data ClsCharac
 data CLG =
   CLG
       -- just a heap of unassigned vars
-    { unassigned :: [Var]
+    { varsHeap :: Heap.MaxPrioHeap Int Var
+    , varScores :: Map.Map Var Int
       -- function associating a value to each var
     , vals :: Var -> VarVal
       -- antecedent clause of each var
@@ -53,11 +57,20 @@ data CLG =
     , unitCls :: Maybe (Lit, Cls)
     }
 
+-- for VSIDS, calculate initial score of a variable by counting number of occurences in clauses
+initScore :: CNF -> Var -> Int
+initScore cnf i =
+  length $
+  filter (\(BigOr ls) -> (Lit i True) `elem` ls || (Lit i False) `elem` ls) $
+  clauses cnf
+
 -- initializes the CLG with the initial required state given a CNF
 initialCLG :: CNF -> CLG
 initialCLG cnf =
   CLG
-    { unassigned = vars cnf
+    { varsHeap = Heap.fromList $ zip (map (initScore cnf) (vars cnf)) (vars cnf)
+    , varScores =
+        Map.fromAscList $ zip (vars cnf) (map (initScore cnf) (vars cnf))
     , vals = \_ -> Undef
     , ante = \_ -> Nothing
     , declev = -1
@@ -103,8 +116,7 @@ characCls clg cls =
 updateVals :: (Lit, Maybe Cls) -> CLG -> CLG
 updateVals ((Lit i pol), cls) clg =
   clg
-    { unassigned = filter (/= i) $ unassigned clg
-    , vals =
+    { vals =
         \i' ->
           if i' == i
             then (if pol
@@ -161,13 +173,15 @@ unitProp = do
           unitProp
           return ()
 
--- simple branching variable picked from the stack of unassigned variables
-pickBranchingVariable :: State CLG (Maybe Int)
+-- simple branching variable picked from the priority heap of unassigned variables
+pickBranchingVariable :: State CLG (Maybe Var)
 pickBranchingVariable = do
   clg <- get
-  case unassigned clg of
-    [] -> return Nothing
-    i:_ -> return $ Just i
+  case Heap.view $ varsHeap clg of
+    Nothing -> return Nothing
+    Just ((prio, var), tail) -> do
+      put (clg {varsHeap = tail})
+      return $ Just var
 
 -- For two clauses ω_j and ω_k, for which there is a unique variable x such that one clause has a literal
 -- x and the other has literal ¬x, resolution ω_j ω_k contains all the literals of ω_j and ω_k with
@@ -220,7 +234,8 @@ conflictAnalysis cls = do
 removeVal :: Var -> CLG -> CLG
 removeVal i clg =
   clg
-    { unassigned = i : (unassigned clg)
+    { varsHeap =
+        Heap.insert (Map.findWithDefault 0 i (varScores clg), i) (varsHeap clg)
     , vals =
         \i' ->
           if i' == i
@@ -233,6 +248,19 @@ removeVal i clg =
             else (ante clg) i'
     , declevs = tail $ declevs clg
     }
+
+incrementScoresLits :: [Lit] -> Map.Map Var Int -> Map.Map Var Int
+incrementScoresLits [] scores = scores
+incrementScoresLits ((Lit i _):ls) scores =
+  incrementScoresLits ls $
+  Map.insert i ((Map.findWithDefault 0 i scores) + 1) scores
+
+-- takes the conflict clause and increments the scores for variables in the conflict clause
+-- for the VSIDS heuristic
+incrementScores :: Cls -> State CLG ()
+incrementScores cls = do
+  clg <- get
+  put (clg {varScores = incrementScoresLits (literals cls) (varScores clg)})
 
 backtrack :: Int -> State CLG ()
 backtrack d = do
@@ -269,7 +297,10 @@ assignVariables = do
           -- no conflicts! go ahead and assign other variables
          -> do
           assignVariables
-        Just cls -> do
+        Just cls
+          -- we have a conflict clause so increment scores
+         -> do
+          incrementScores cls
           backtrackLevel <- conflictAnalysis cls
           if backtrackLevel < 0
             then return () -- unsat
