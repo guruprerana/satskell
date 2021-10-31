@@ -1,3 +1,4 @@
+-- NOTE: THIS IS THE EXACT SAME AS THE CDCL FILE BUT WITH WATCHED LITERALS ADDED ON TOP
 module Solver.CDCLWatchedLits
   ( solution
   ) where
