@@ -111,7 +111,7 @@ checkCLG = do
 
 Notice the almost imperative implementation here which mimics the pseudocode shown earlier in a very similar fashion.
 
-## Comparison of algoritms
+## Comparison of algorithms
 
 We test our implementations against [Minisat](https://github.com/niklasso/minisat) by running each of our different methods and timing them on our test files.
 
