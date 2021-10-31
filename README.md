@@ -29,17 +29,113 @@ where `<method>` is one of `naive`, `backtracking`, `dpll`, or `cdcl`.
 - *CDCL*: With the DPLL implementation, we see that we have to pass around updated clauses and variables between functions which gets cumbersome very quickly especially when we have to deal with non-synchronous backtracking in CDCL. This is why we switch to a monadic style implementation of CDCL with the `State` monad in Haskell which helps us keep a track of the current implication graph and assignments by mutating it at different points.
 - It is very interesting to note that with the monadic style, we can closely match imperative programming style which you can observe if you look at the `cdcl` and `assignVariables` functions in `Solver.CDCL` which almost correspond line by line to the pseudocode of the CDCL algorithm presented [here](https://www.cs.princeton.edu/~zkincaid/courses/fall18/readings/SATHandbook-CDCL.pdf)
 
+The pseudocode presented looks like this:
+
+```
+CDCL(ϕ, ν)
+    if (UnitPropagation(ϕ, ν) == CONFLICT)
+        then return UNSAT
+    dl <- 0 (Decision level)
+    while (not AllVariablesAssigned(ϕ, ν))
+        do (x, v) = PickBranchingVariable(ϕ, ν) (Decide stage)
+            dl <- dl + 1 (Increment decision level due to new decision)
+            ν <- ν ∪ {(x, v)}
+            if (UnitPropagation(ϕ, ν) == CONFLICT) (Deduce stage)
+                then β = ConflictAnalysis(ϕ, ν) (Diagnose stage)
+                     if (β < 0)
+                        then return UNSAT
+                        else Backtrack(ϕ, ν, β)
+                             dl <- β (Decrement decision level due to backtracking)
+    return SAT
+```
+
+In comparison, our code looks like
+
+```hs
+cdcl :: State CLG ()
+cdcl = do
+  unitProp -- try unit propogation
+  clg <- get
+  case unsatCls clg of
+    Just _ -> return () -- if we have an unsatisfiable clause, then it is UNSAT
+    Nothing -> do -- if not, then we can go ahead and start assigning variables
+      put (clg {declev = 0})
+      assignVariables
+      return ()
+
+-- loops until all the variables are assigned or there is a conflict which is unresolvable
+assignVariables :: State CLG ()
+assignVariables = do
+  mi <- pickBranchingVariable
+  -- can explore with different heuristics for picking the branching variable - cuurently using VSIDS
+  case mi of
+    Nothing -> return () -- no more variables left to assign so exit
+    Just i -> do
+      clg <- get
+      put (clg {declev = (declev clg) + 1})
+      -- we assign chosen decision variables to be false by default
+      -- can experiment with random assignment?
+      inferLit (Lit i False, Nothing)
+      checkCLG
+
+checkCLG :: State CLG ()
+checkCLG = do
+  unitProp -- after choosing decision variable try unit propogation
+  clg <- get
+  case unsatCls clg of -- check if we have unsatisfiable (conflict) clauses
+    Nothing
+      -- no conflicts! go ahead and assign other variables
+     -> do
+      assignVariables
+    Just cls
+      -- we have a conflict clause so increment scores
+     -> do
+      incrementScores cls -- for the VSIDS heuristic, increment scores of variables in conflict clause
+      backtrackLevel <- conflictAnalysis cls
+      if backtrackLevel <= 0
+        then return () -- UNSAT
+          -- else we want to backtrack
+        else do
+          clg1 <- get
+          put
+            (clg1
+               {declev = backtrackLevel, unsatCls = Nothing, unitCls = Nothing})
+          backtrack backtrackLevel
+          -- check and update unsatCls/unitCls because new ones could be created
+          -- after the added clause
+          clg2 <- get
+          mapM checkCls $ clss clg2
+          checkCLG
+```
+
+Notice the almost imperative implementation here which mimics the pseudocode shown earlier in a very similar fashion.
+
 ## Comparison of algoritms
 
-We test our implementations against [Minisat](https://github.com/niklasso/minisat)!
+We test our implementations against [Minisat](https://github.com/niklasso/minisat) by running each of our different methods and timing them on our test files.
 
-TODO: Add table comparing timings of different algorithms vs. Minisat
+We use the following settings to run Minisat: `minisat <cnf-file> -no-luby -rinc=1.5 -phase-saving=0 -rnd-freq=0.02`.
+
+| **N** |    **Filename**   | **backtracking** | **dpll** | **cdcl** + **VSIDS heuristic** | **minisat** |
+|:-----:|:-----------------:|:----------------:|:--------:|:------------------------------:|:-----------:|
+|   1   |  `colorK5_4.cnf`  |      0.039s      |  0.012s  |             0.036s             |    0.005s   |
+|   2   |  `colorK8_7.cnf`  |      1.976s      |  0.548s  |             8.469s             |    0.034s   |
+|   3   | `colorK15_15.cnf` |      0.142s      |  0.107s  |             0.228s             |    0.007s   |
+|   4   |    `ninec.cnf`    |      0.015s      |  0.015s  |             0.015s             |    0.008s   |
+|   5   | `notdichot20.cnf` |     Too long!    |  0.031s  |             0.074s             |    0.007s   |
+|   6   |     `php4.cnf`    |      0.017s      |  0.010s  |             0.010s             |    0.009s   |
+|   7   |     `php5.cnf`    |      0.047s      |  0.012s  |             0.014s             |    0.007s   |
+|   8   |     `php7.cnf`    |      0.248s      |  0.044s  |             0.646s             |    0.015s   |
+|   9   |     `php9.cnf`    |      14.517s     |  1.790s  |            Too long!           |    0.226s   |
+|   10  |      `r.cnf`      |      0.006s      |  0.010s  |             0.010s             |    0.004s   |
+|   11  |   `random5.cnf`   |      0.011s      |  0.010s  |             0.010s             |    0.007s   |
+|   12  |  `random60a.cnf`  |     Too long!    |  0.119s  |             0.095s             |    0.007s   |
+|   13  |  `random60b.cnf`  |     Too long!    |  0.137s  |             0.289s             |    0.009s   |
 
 ## In the future?
 
-1. Complete the implementation of the VSIDS branching heuristic
-2. Quicker identification of unit clauses or unsatisfied conflict clauses by storing additional data within the state associated to each clause
-3. Periodic search restarts and clause deletion
+1. Quicker identification of unit clauses or unsatisfied conflict clauses by storing additional data within the state associated to each clause - watched literals. This is easy to do with the monadic style that we have adopted!
+2. Periodic search restarts and clause deletion to prevent blowup of generated clauses
 
 ### References
 
