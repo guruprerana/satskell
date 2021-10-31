@@ -1,6 +1,6 @@
 # satskell
 
-SAT in Haskell! In this project, we implement multiple algorithms to solve the Boolean Satisfiability problem. We have a basic **backtracking** algorithm, followed by a **DPLL** algorithm, and lastly the **CDCL** algorithm used in almost all of the state-of-the-art production grade SAT solvers (with additional optimizations on top of course!). Each of these is built in purely functional style using Haskell.
+SAT in Haskell! In this project, we implement multiple algorithms to solve the Boolean Satisfiability problem. We have a basic **backtracking** algorithm, followed by a **DPLL** algorithm, and lastly the **CDCL** algorithm with the **VSIDS** branching heuristic (which is also the standard algorithm used in almost all of the state-of-the-art SAT solvers). Each of these is built in purely functional style using Haskell.
 
 ## Build
 
@@ -26,7 +26,8 @@ where `<method>` is one of `naive`, `backtracking`, `dpll`, or `cdcl`.
 - A few common functions are shared between the backtracking and DPLL implementations which are in the `Solver.Utils` module
 - *Basic Backtracking*: Simple to write functionally!
 - *DPLL*: Still pretty easy to implement unit propagation and pure literal elimination
-- *CDCL*: With the DPLL implementation, we see that we have to pass around updated clauses and variables between functions which gets cumbersome very quickly especially when we have to deal with non-synchronous backtracking in CDCL. This is why we switch to a monadic style implementation of CDCL with the `State` monad in Haskell which helps us keep a track of the current implication graph and assignments by mutating it at different points.
+- *CDCL*: With the DPLL implementation, we see that we have to pass around updated clauses and variables between functions which gets cumbersome very quickly especially when we have to deal with non-chronological backtracking in CDCL. This is why we switch to a monadic style implementation of CDCL with the `State` monad in Haskell which helps us keep a track of the current implication graph and assignments by mutating the global state at different points. 
+- The `State` monad also facilitates us to store additional structures within the state in order to boost our performance. For example, we store scores associated to each variable to implement the VSIDS branching heuristic.
 - It is very interesting to note that with the monadic style, we can closely match imperative programming style which you can observe if you look at the `cdcl` and `assignVariables` functions in `Solver.CDCL` which almost correspond line by line to the pseudocode of the CDCL algorithm presented [here](https://www.cs.princeton.edu/~zkincaid/courses/fall18/readings/SATHandbook-CDCL.pdf)
 
 The pseudocode presented looks like this:
