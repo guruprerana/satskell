@@ -109,7 +109,9 @@ evalCls clg (BigOr ls) = or $ map (evalLit clg) ls
 -- list of undefined lits in a clause
 undefLitsCls :: CLG -> Cls -> [Lit]
 undefLitsCls clg (BigOr ls) =
-  Prelude.filter (\(Lit i _) -> (Map.findWithDefault Undef i (vals clg)) == Undef) ls
+  Prelude.filter
+    (\(Lit i _) -> (Map.findWithDefault Undef i (vals clg)) == Undef)
+    ls
 
 -- characterizes a clause and also returns a literal if it is a unit clause
 characCls :: CLG -> Cls -> (ClsCharac, Maybe Lit)
@@ -126,7 +128,13 @@ characCls clg cls =
 updateVals :: (Lit, Maybe Cls) -> CLG -> CLG
 updateVals ((Lit i pol), cls) clg =
   clg
-    { vals = Map.insert i (if pol then One else Zero) (vals clg)
+    { vals =
+        Map.insert
+          i
+          (if pol
+             then One
+             else Zero)
+          (vals clg)
     , ante = Map.insert i cls (ante clg)
     , declevs = (i, declev clg) : (declevs clg)
     , declevVar = Map.insert i (declev clg) (declevVar clg)
@@ -218,7 +226,9 @@ learnedClause clg cls =
     anteClsM = Map.findWithDefault Nothing (head litsDeclev) (ante clg)
     litsDeclev =
       Prelude.filter
-        (\i -> (declevOf clg i) == (declev clg) && (Map.findWithDefault Nothing i (ante clg)) /= Nothing) $
+        (\i ->
+           (declevOf clg i) == (declev clg) &&
+           (Map.findWithDefault Nothing i (ante clg)) /= Nothing) $
       map (\(Lit i _) -> i) (literals cls)
     nLitsDeclev = length litsDeclev
 
@@ -227,7 +237,8 @@ maxDecLevel :: CLG -> Cls -> Int
 maxDecLevel clg cls =
   case Prelude.filter (\d -> d /= (declev clg)) $
        map (declevOf clg) $
-       Prelude.filter (\i -> (Map.findWithDefault Nothing i (ante clg)) == Nothing) $
+       Prelude.filter
+         (\i -> (Map.findWithDefault Nothing i (ante clg)) == Nothing) $
        map (\(Lit i _) -> i) (literals cls) of
     [] -> (declev clg) - 1
     ls -> maximum ls
@@ -273,7 +284,8 @@ backtrack d = do
     (i, d'):_ ->
       if d' < d
         then return ()
-        else if (d' == d && (Map.findWithDefault Nothing i (ante clg)) == Nothing)
+        else if (d' == d &&
+                 (Map.findWithDefault Nothing i (ante clg)) == Nothing)
                then return () -- we do not need to change anything at the decision assignment
                else do
                  put (removeVal i clg)
@@ -284,10 +296,7 @@ backtrack d = do
 switchDec :: Var -> State CLG ()
 switchDec i = do
   clg <- get
-  put
-    (clg
-       { vals = Map.insert i One (vals clg)
-       })
+  put (clg {vals = Map.insert i One (vals clg)})
 
 checkCLG :: State CLG ()
 checkCLG = do
@@ -345,7 +354,8 @@ cdcl = do
       return ()
 
 constructSubst :: (Map.Map Var VarVal) -> [Var] -> Subst
-constructSubst vals vars = zip vars $ map (convert . (\i -> Map.findWithDefault Zero i vals)) vars
+constructSubst vals vars =
+  zip vars $ map (convert . (\i -> Map.findWithDefault Zero i vals)) vars
   where
     convert :: VarVal -> Bool
     convert One = True
