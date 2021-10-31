@@ -2,6 +2,8 @@
 
 SAT in Haskell! In this project, we implement multiple algorithms to solve the Boolean Satisfiability problem. We have a basic **backtracking** algorithm, followed by a **DPLL** algorithm, and lastly the **CDCL** algorithm with the **VSIDS** branching heuristic (which is also the standard algorithm used in almost all of the state-of-the-art SAT solvers). Each of these is built in purely functional style using Haskell.
 
+Along with the *CDCL* implementation, we include a method to add **watched literal tracking** to clauses for quicker identification of unit clauses, however the implementation we have is still quite slow and in fact does not speed up our *CDCL* method.
+
 ## Build
 
 GHC (Glasgow Haskell Compiler) is a prerequisite to compile the program. You will also need to have the `mtl` Cabal package installed for which you can use `cabal install --lib mtl`.
@@ -18,7 +20,9 @@ You can use the following command to run satskell and check the satisfiability o
 ./MySat <dimacs-file-name> <method>
 ```
 
-where `<method>` is one of `naive`, `backtracking`, `dpll`, or `cdcl`.
+where `<method>` is one of `naive`, `backtracking`, `dpll`, `cdcl`, `cdclwl`.
+
+Note: `cdclwl` refers to the CDCL method along with watched literals. However with our current implementation, it is (unfortunately) much slower than the simple `cdcl` method.
 
 ## Implementation remarks
 
@@ -135,8 +139,8 @@ We use the following settings to run Minisat: `minisat <cnf-file> -no-luby -rinc
 
 ## In the future?
 
-1. Quicker identification of unit clauses or unsatisfied conflict clauses by storing additional data within the state associated to each clause - watched literals. This is easy to do with the monadic style that we have adopted!
-2. Periodic search restarts and clause deletion to prevent blowup of generated clauses
+1. Improve the watched literals implementation by also storing a map from literals to the clauses in which it appears - by storing this additional map in the state. This is easy to do with the `State` monad that we have adopted! 
+2. Periodic search restarts and clause deletion to prevent blowup of generated clauses in CDCL. You can observe that `php9.cnf` is very slow with CDCL. This is mainly due to the blowup in the number of clauses.
 
 ### References
 

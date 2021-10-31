@@ -1,4 +1,5 @@
-module Solver.CDCL
+-- NOTE: THIS IS THE EXACT SAME AS THE CDCL FILE BUT WITH WATCHED LITERALS ADDED ON TOP
+module Solver.CDCLWatchedLits
   ( solution
   ) where
 
@@ -59,7 +60,7 @@ data CLG =
       -- the input integer i is assumed 0 <= i < ncls
       -- UNUSED FOR THE MOMENT
     , clscharac :: IntMap.IntMap ClsCharac
-      -- UNUSED for the moment
+      -- associates each clause index with its watched literals in the form of a clause
     , watchedlits :: IntMap.IntMap Cls
       -- when we perform unit propagation and encounter an unsatified clause
       -- we assign this record to the unsat clause
@@ -82,6 +83,9 @@ initWatchedLits (BigOr ls) =
     [] -> (BigOr [])
     l:[] -> (BigOr [l])
     ls -> (BigOr (take 2 ls))
+
+emptyCls :: Cls
+emptyCls = BigOr []
 
 -- initializes the CLG with the initial required state given a CNF
 initialCLG :: CNF -> CLG
@@ -131,18 +135,17 @@ undefLitsCls clg (BigOr ls) =
     (\(Lit i _) -> (IntMap.findWithDefault Undef i (vals clg)) == Undef)
     ls
 
--- characterizes a clause and also returns a literal if it is a unit clause
-characCls :: CLG -> Cls -> (ClsCharac, Maybe Lit)
+-- characterizes a clause and also returns a literal if it is a unit clause along with the new watched literals clause
+characCls :: CLG -> Cls -> (ClsCharac, Maybe Lit, Cls)
 characCls clg cls =
   case evalCls clg cls of
-    True -> (Sat, Nothing)
+    True -> (Sat, Nothing, initWatchedLits $ (BigOr (undefLitsCls clg cls)))
     False ->
       case undefLitsCls clg cls of
-        [] -> (Unsat, Nothing)
-        l:[] -> (Unit, Just l)
-        otherwise -> (Unres, Nothing)
+        [] -> (Unsat, Nothing, BigOr [])
+        l:[] -> (Unit, Just l, BigOr [l])
+        ls -> (Unres, Nothing, BigOr (take 2 ls))
 
---characClsWL :: CLG -> Int -> 
 -- updates the CLG by conditioning with a literal which appears in a clause cls
 updateVals :: (Lit, Maybe Cls) -> CLG -> CLG
 updateVals ((Lit i pol), cls) clg =
@@ -168,13 +171,51 @@ checkCls :: Cls -> State CLG ()
 checkCls cls = do
   clg <- get
   case characCls clg cls of
-    (Unit, Just l) -> do
+    (Unit, Just l, _) -> do
       put (clg {unitCls = Just (l, cls)})
       return ()
-    (Unsat, _) -> do
+    (Unsat, _, _) -> do
       put (clg {unsatCls = Just cls})
       return ()
     otherwise -> return ()
+
+-- check a particular clause at a given index and update unsatCls/unitCls if needed
+checkClsInd :: Int -> State CLG ()
+checkClsInd clsi = do
+  clg <- get
+  case characCls clg ((clss clg) !! clsi) of
+    (Unit, Just l, wl1) -> do
+      put
+        (clg
+           { unitCls = Just (l, ((clss clg) !! clsi))
+           , watchedlits = IntMap.insert clsi wl1 (watchedlits clg)
+           })
+      return ()
+    (Unsat, Nothing, wl2) -> do
+      put
+        (clg
+           { unsatCls = Just ((clss clg) !! clsi)
+           , watchedlits = IntMap.insert clsi wl2 (watchedlits clg)
+           })
+      return ()
+    (_, _, wl3) -> do
+      put (clg {watchedlits = IntMap.insert clsi wl3 (watchedlits clg)})
+      return ()
+
+-- check the watched literal of a clause and proceed to check the whole clause if needed
+checkClsWL :: Int -> State CLG ()
+checkClsWL clsi = do
+  clg <- get
+  case evalCls clg $ IntMap.findWithDefault emptyCls clsi (watchedlits clg) of
+    True -> return ()
+    False ->
+      case undefLitsCls clg $
+           IntMap.findWithDefault emptyCls clsi (watchedlits clg) of
+        [] -> do
+          checkClsInd clsi
+        l:[] -> do
+          checkClsInd clsi
+        ls -> return ()
 
 -- performs the conditioning of a given variable assignment and also checks for
 -- unsatisfied/unit clauses
@@ -184,7 +225,8 @@ inferLit (l, cls) = do
   put (updateVals (l, cls) clg)
   -- go through each clause and check it with checkCls
   clg' <- get
-  mapM checkCls $ clss clg'
+  -- check the watched literals of each clause
+  mapM checkClsWL $ [0 .. ((ncls clg') - 1)]
   return ()
 
 -- repeatedly looks for and resolves wrt unit clauses
@@ -266,7 +308,7 @@ maxDecLevel clg cls =
 conflictAnalysis :: Cls -> State CLG Int
 conflictAnalysis cls = do
   clg <- get
-  put (clg {clss = (learnedClause clg cls) : (clss clg)})
+  put (clg {clss = (learnedClause clg cls) : (clss clg), ncls = (ncls clg) + 1})
   clg' <- get
   return $ maxDecLevel clg' $ head $ clss clg'
 
@@ -345,7 +387,7 @@ checkCLG = do
           -- check and update unsatCls/unitCls because new ones could be created
           -- after the added clause
           clg2 <- get
-          mapM checkCls $ clss clg2
+          mapM checkClsInd $ [0 .. ((ncls clg2) - 1)]
           checkCLG
 
 -- loops until all the variables are assigned or there is a conflict which is unresolvable
