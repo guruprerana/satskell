@@ -59,7 +59,7 @@ data CLG =
       -- the input integer i is assumed 0 <= i < ncls
       -- UNUSED FOR THE MOMENT
     , clscharac :: IntMap.IntMap ClsCharac
-      -- UNUSED for the moment
+      -- associates each clause index with its watched literals in the form of a clause
     , watchedlits :: IntMap.IntMap Cls
       -- when we perform unit propagation and encounter an unsatified clause
       -- we assign this record to the unsat clause
@@ -178,6 +178,7 @@ checkCls cls = do
       return ()
     otherwise -> return ()
 
+-- check a particular clause at a given index and update unsatCls/unitCls if needed
 checkClsInd :: Int -> State CLG ()
 checkClsInd clsi = do
   clg <- get
@@ -200,15 +201,12 @@ checkClsInd clsi = do
       put (clg {watchedlits = IntMap.insert clsi wl3 (watchedlits clg)})
       return ()
 
+-- check the watched literal of a clause and proceed to check the whole clause if needed
 checkClsWL :: Int -> State CLG ()
 checkClsWL clsi = do
   clg <- get
   case evalCls clg $ IntMap.findWithDefault emptyCls clsi (watchedlits clg) of
     True -> return ()
-      --case undefLitsCls clg $ ((clss clg) !! clsi) of
-      --  ls -> do
-      --    put (clg {watchedlits = IntMap.insert i (initWatchedLits (BigOr ls)) (watchedlits clg)})
-      --    return ()
     False ->
       case undefLitsCls clg $
            IntMap.findWithDefault emptyCls clsi (watchedlits clg) of
@@ -226,6 +224,7 @@ inferLit (l, cls) = do
   put (updateVals (l, cls) clg)
   -- go through each clause and check it with checkCls
   clg' <- get
+  -- check the watched literals of each clause
   mapM checkClsWL $ [0 .. ((ncls clg') - 1)]
   return ()
 
