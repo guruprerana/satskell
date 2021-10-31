@@ -150,3 +150,7 @@ We use the following settings to run Minisat: `minisat <cnf-file> -no-luby -rinc
 ### Code formatting
 
 We are using `hindent` to format our Haskell source code with the configuration file `.hindent.yaml`.
+
+### Github repo where you can find the most up-to date satskell
+
+https://github.com/guruprerana/satskell
