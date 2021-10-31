@@ -11,7 +11,8 @@ import Data.Heap as Heap (MaxPrioHeap, empty, filter, fromList, insert, view)
 -- import CNF.Eval
 -- import Solver.Utils
 import Data.List
-import Data.Map as Map (Map, findWithDefault, fromAscList, insert)
+-- faster than using just Data.Map or just Data.List as this gives us almost constant time access
+import Data.IntMap.Lazy as IntMap (IntMap, findWithDefault, fromAscList, insert)
 import Data.Maybe
 
 -- the current assignement for a var can be either Zero (False), undefined, or One (True)
@@ -38,17 +39,17 @@ data CLG =
   CLG
       -- just a heap of unassigned vars
     { varsHeap :: Heap.MaxPrioHeap Int Var
-    , varScores :: Map.Map Var Int
+    , varScores :: IntMap.IntMap Int
       -- function associating a value to each var
-    , vals :: Map.Map Var VarVal
+    , vals :: IntMap.IntMap VarVal
       -- antecedent clause of each var
-    , ante :: Map.Map Var (Maybe Cls)
+    , ante :: IntMap.IntMap (Maybe Cls)
       -- current decision level in the state
     , declev :: Int
       -- declaration level of variables arranged in desc. order or level
     , declevs :: [(Var, Int)]
       -- additional map storing same data as declevs for faster access to devlev of a var
-    , declevVar :: Map.Map Var Int
+    , declevVar :: IntMap.IntMap Int
       -- number of clauses
     , ncls :: Int
       -- clauses of the CNF
@@ -56,7 +57,9 @@ data CLG =
       -- associates each clause with a characterization
       -- the input integer i is assumed 0 <= i < ncls
       -- UNUSED FOR THE MOMENT
-    , clscharac :: Int -> ClsCharac
+    , clscharac :: IntMap.IntMap ClsCharac
+      -- UNUSED for the moment
+    , watchedlits :: IntMap.IntMap Cls
       -- when we perform unit propagation and encounter an unsatified clause
       -- we assign this record to the unsat clause
     , unsatCls :: Maybe Cls
@@ -72,21 +75,34 @@ initScore cnf i =
     (\(BigOr ls) -> (Lit i True) `elem` ls || (Lit i False) `elem` ls) $
   clauses cnf
 
+initWatchedLits :: Cls -> Cls
+initWatchedLits (BigOr ls) =
+  case ls of
+    [] -> (BigOr [])
+    l:[] -> (BigOr [l])
+    ls -> (BigOr (take 2 ls))
+
 -- initializes the CLG with the initial required state given a CNF
 initialCLG :: CNF -> CLG
 initialCLG cnf =
   CLG
     { varsHeap = Heap.fromList $ zip (map (initScore cnf) (vars cnf)) (vars cnf)
     , varScores =
-        Map.fromAscList $ zip (vars cnf) (map (initScore cnf) (vars cnf))
-    , vals = Map.fromAscList [(v, Undef) | v <- (vars cnf)]
-    , ante = Map.fromAscList [(v, Nothing) | v <- (vars cnf)]
+        IntMap.fromAscList $ zip (vars cnf) (map (initScore cnf) (vars cnf))
+    , vals = IntMap.fromAscList [(v, Undef) | v <- (vars cnf)]
+    , ante = IntMap.fromAscList [(v, Nothing) | v <- (vars cnf)]
     , declev = 0
     , declevs = [(i, -1) | i <- (vars cnf)]
-    , declevVar = Map.fromAscList [(v, -1) | v <- (vars cnf)]
+    , declevVar = IntMap.fromAscList [(v, -1) | v <- (vars cnf)]
     , ncls = length $ clauses cnf
     , clss = clauses cnf
-    , clscharac = \_ -> Unres
+    , clscharac =
+        IntMap.fromAscList [(i, Unres) | i <- [0 .. ((length $ clauses cnf) - 1)]]
+    , watchedlits =
+        IntMap.fromAscList
+          [ (i, initWatchedLits ((clauses cnf) !! i))
+          | i <- [0 .. ((length $ clauses cnf) - 1)]
+          ]
     , unsatCls = Nothing
     , unitCls =
         case Prelude.filter (\(BigOr ls) -> length ls == 1) $ clauses cnf of
@@ -97,7 +113,7 @@ initialCLG cnf =
 -- evaluates a literal given a CLG which contains the valuation function vals
 evalLit :: CLG -> Lit -> Bool
 evalLit clg (Lit i pol) =
-  case (Map.findWithDefault Undef i (vals clg), pol) of
+  case (IntMap.findWithDefault Undef i (vals clg), pol) of
     (Zero, False) -> True
     (One, True) -> True
     otherwise -> False
@@ -110,7 +126,7 @@ evalCls clg (BigOr ls) = or $ map (evalLit clg) ls
 undefLitsCls :: CLG -> Cls -> [Lit]
 undefLitsCls clg (BigOr ls) =
   Prelude.filter
-    (\(Lit i _) -> (Map.findWithDefault Undef i (vals clg)) == Undef)
+    (\(Lit i _) -> (IntMap.findWithDefault Undef i (vals clg)) == Undef)
     ls
 
 -- characterizes a clause and also returns a literal if it is a unit clause
@@ -124,20 +140,22 @@ characCls clg cls =
         l:[] -> (Unit, Just l)
         otherwise -> (Unres, Nothing)
 
+--characClsWL :: CLG -> Int -> 
+
 -- updates the CLG by conditioning with a literal which appears in a clause cls
 updateVals :: (Lit, Maybe Cls) -> CLG -> CLG
 updateVals ((Lit i pol), cls) clg =
   clg
     { vals =
-        Map.insert
+        IntMap.insert
           i
           (if pol
              then One
              else Zero)
           (vals clg)
-    , ante = Map.insert i cls (ante clg)
+    , ante = IntMap.insert i cls (ante clg)
     , declevs = (i, declev clg) : (declevs clg)
-    , declevVar = Map.insert i (declev clg) (declevVar clg)
+    , declevVar = IntMap.insert i (declev clg) (declevVar clg)
     , unitCls = Nothing
     , varsHeap = Heap.filter (\(_, i') -> i' /= i) (varsHeap clg)
     }
@@ -207,7 +225,7 @@ resolution (BigOr ls1) (BigOr ls2) = BigOr ((union ls1 ls2) \\ [l, opl l])
 
 -- compute decision level of a variable
 declevOf :: CLG -> Var -> Int
-declevOf clg i = Map.findWithDefault (-1) i (declevVar clg)
+declevOf clg i = IntMap.findWithDefault (-1) i (declevVar clg)
 
 -- compute the learned clause given the conflict clause by recursive resolution
 learnedClause :: CLG -> Cls -> Cls
@@ -223,12 +241,12 @@ learnedClause clg cls =
             ("ANTECLS NOTHING: not possible in the usual flow " ++
              (show $ map (declevOf clg) litsDeclev))
         Just cls -> cls
-    anteClsM = Map.findWithDefault Nothing (head litsDeclev) (ante clg)
+    anteClsM = IntMap.findWithDefault Nothing (head litsDeclev) (ante clg)
     litsDeclev =
       Prelude.filter
         (\i ->
            (declevOf clg i) == (declev clg) &&
-           (Map.findWithDefault Nothing i (ante clg)) /= Nothing) $
+           (IntMap.findWithDefault Nothing i (ante clg)) /= Nothing) $
       map (\(Lit i _) -> i) (literals cls)
     nLitsDeclev = length litsDeclev
 
@@ -238,7 +256,7 @@ maxDecLevel clg cls =
   case Prelude.filter (\d -> d /= (declev clg)) $
        map (declevOf clg) $
        Prelude.filter
-         (\i -> (Map.findWithDefault Nothing i (ante clg)) == Nothing) $
+         (\i -> (IntMap.findWithDefault Nothing i (ante clg)) == Nothing) $
        map (\(Lit i _) -> i) (literals cls) of
     [] -> (declev clg) - 1
     ls -> maximum ls
@@ -255,18 +273,18 @@ removeVal :: Var -> CLG -> CLG
 removeVal i clg =
   clg
     { varsHeap =
-        Heap.insert (Map.findWithDefault 0 i (varScores clg), i) (varsHeap clg)
-    , vals = Map.insert i Undef (vals clg)
-    , ante = Map.insert i Nothing (ante clg)
+        Heap.insert (IntMap.findWithDefault 0 i (varScores clg), i) (varsHeap clg)
+    , vals = IntMap.insert i Undef (vals clg)
+    , ante = IntMap.insert i Nothing (ante clg)
     , declevs = tail $ declevs clg
-    , declevVar = Map.insert i (-1) (declevVar clg)
+    , declevVar = IntMap.insert i (-1) (declevVar clg)
     }
 
-incrementScoresLits :: [Lit] -> Map.Map Var Int -> Map.Map Var Int
+incrementScoresLits :: [Lit] -> IntMap.IntMap Int -> IntMap.IntMap Int
 incrementScoresLits [] scores = scores
 incrementScoresLits ((Lit i _):ls) scores =
   incrementScoresLits ls $
-  Map.insert i ((Map.findWithDefault 0 i scores) + 1) scores
+  IntMap.insert i ((IntMap.findWithDefault 0 i scores) + 1) scores
 
 -- takes the conflict clause and increments the scores for variables in the conflict clause
 -- for the VSIDS heuristic
@@ -285,7 +303,7 @@ backtrack d = do
       if d' < d
         then return ()
         else if (d' == d &&
-                 (Map.findWithDefault Nothing i (ante clg)) == Nothing)
+                 (IntMap.findWithDefault Nothing i (ante clg)) == Nothing)
                then return () -- we do not need to change anything at the decision assignment
                else do
                  put (removeVal i clg)
@@ -296,7 +314,7 @@ backtrack d = do
 switchDec :: Var -> State CLG ()
 switchDec i = do
   clg <- get
-  put (clg {vals = Map.insert i One (vals clg)})
+  put (clg {vals = IntMap.insert i One (vals clg)})
 
 checkCLG :: State CLG ()
 checkCLG = do
@@ -353,9 +371,9 @@ cdcl = do
       assignVariables
       return ()
 
-constructSubst :: (Map.Map Var VarVal) -> [Var] -> Subst
+constructSubst :: (IntMap.IntMap VarVal) -> [Var] -> Subst
 constructSubst vals vars =
-  zip vars $ map (convert . (\i -> Map.findWithDefault Zero i vals)) vars
+  zip vars $ map (convert . (\i -> IntMap.findWithDefault Zero i vals)) vars
   where
     convert :: VarVal -> Bool
     convert One = True
