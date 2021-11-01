@@ -109,7 +109,10 @@ initialCLG cnf =
           [ (i, initWatchedLits ((clauses cnf) !! i))
           | i <- [0 .. ((length $ clauses cnf) - 1)]
           ]
-    , unsatCls = Nothing
+    , unsatCls =
+        if (BigOr []) `elem` (clauses cnf)
+          then Just (BigOr [])
+          else Nothing
     , unitCls =
         case Prelude.filter (\(BigOr ls) -> length ls == 1) $ clauses cnf of
           [] -> Nothing
