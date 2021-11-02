@@ -27,10 +27,10 @@ Note: `cdclwl` refers to the CDCL method along with watched literals. However wi
 ## Implementation remarks
 
 - Each algorithm is written in separate modules found within `Solver/`.
-- A few common functions are shared between the backtracking and DPLL implementations which are in the `Solver.Utils` module
-- *Basic Backtracking*: Simple to write functionally!
-- *DPLL*: Still pretty easy to implement unit propagation and pure literal elimination
-- *CDCL*: With the DPLL implementation, we see that we have to pass around updated clauses and variables between functions which gets cumbersome very quickly especially when we have to deal with non-chronological backtracking in CDCL. This is why we switch to a monadic style implementation of CDCL with the `State` monad in Haskell which helps us keep a track of the current implication graph and assignments by mutating the global state at different points. 
+- A few common functions are shared between the backtracking and DPLL implementations which are in the [`Solver.Utils`](https://github.com/guruprerana/satskell/blob/master/Solver/Utils.hs) module
+- [*Basic Backtracking*](https://github.com/guruprerana/satskell/blob/master/Solver/Backtracking.hs): Simple to write functionally!
+- [*DPLL*](https://github.com/guruprerana/satskell/blob/master/Solver/DPLL.hs): Still pretty easy to implement unit propagation and pure literal elimination
+- [*CDCL*](https://github.com/guruprerana/satskell/blob/master/Solver/CDCL.hs): With the DPLL implementation, we see that we have to pass around updated clauses and variables between functions which gets cumbersome very quickly especially when we have to deal with non-chronological backtracking in CDCL. This is why we switch to a monadic style implementation of CDCL with the `State` monad in Haskell which helps us keep a track of the current implication graph and assignments by mutating the global state at different points. 
 - The `State` monad also facilitates us to store additional structures within the state in order to boost our performance. For example, we store scores associated to each variable to implement the VSIDS branching heuristic.
 - It is very interesting to note that with the monadic style, we can closely match imperative programming style which you can observe if you look at the `cdcl` and `assignVariables` functions in `Solver.CDCL` which almost correspond line by line to the pseudocode of the CDCL algorithm presented [here](https://www.cs.princeton.edu/~zkincaid/courses/fall18/readings/SATHandbook-CDCL.pdf)
 
