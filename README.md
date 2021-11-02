@@ -142,8 +142,8 @@ We use the following settings to run Minisat: `minisat <cnf-file> -no-luby -rinc
 |   11  |   `random5.cnf`   |      0.011s      |  0.010s  |             0.010s             |    0.007s   |
 |   12  |  `random60a.cnf`  |     Too long!    |  0.119s  |             0.095s             |    0.007s   |
 |   13  |  `random60b.cnf`  |     Too long!    |  0.137s  |             0.289s             |    0.009s   |
-|   14  |   `dubois20.cnf`  |     Too long!    | 51.470s  |             1.504s             |    0.007s   |
-|   15  |   `dubois22.cnf`  |     Too long!    | 12.158s  |             2.896s             |    0.005s   |
+|   14  |   `dubois20.cnf`  |     Too long!    | 51.470s  |           **1.504s**           |    0.007s   |
+|   15  |   `dubois22.cnf`  |     Too long!    | 12.158s  |           **2.896s**           |    0.005s   |
 |   16  |  `aim-100....cnf` |     Too long!    |  3.181s  |             0.052s             |    0.005s   |
 |   17  |  `bf0432-007.cnf` |     Too long!    | **>3m**  |          **1m1.368s**          |    0.017s   |
 
