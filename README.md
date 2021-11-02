@@ -115,6 +115,12 @@ checkCLG = do
 
 Notice the almost imperative implementation here which mimics the pseudocode shown earlier in a very similar fashion.
 
+### Other smaller optimizations to make CDCL (slightly) faster
+
+- In order to implement the *VSIDS* branching heuristic, we need to pick the variable with the highest score at each iteration of the variable assignment loop. For this, we employ [max priority heaps](https://github.com/guruprerana/satskell/blob/e6cf3ae56ca05c33be184c760ad4aee99adb6914/Solver/CDCL.hs#L42) which are available to us with the `Data.Heap` module.
+- We use [integer maps](https://github.com/guruprerana/satskell/blob/e6cf3ae56ca05c33be184c760ad4aee99adb6914/Solver/CDCL.hs#L43) from the `Data.IntMap` module wherever possible instead of `Data.List` or `Data.Map` since it is faster than both of the others as it makes use of binary tries. For `Data.List`, we have a linear complexity in accessing elements and a logarithmic complexity with `Data.Map` which uses binary trees.
+- Note that it is hard to implement a purely functional constant-time read and write arrays unless perhaps using a hash map. 
+
 ## Comparison of algorithms
 
 We test our implementations against [Minisat](https://github.com/niklasso/minisat) by running each of our different methods and timing them on our test files.
