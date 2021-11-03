@@ -348,15 +348,12 @@ backtrack d = do
   case declevs clg of
     [] -> return ()
     (i, d'):_ ->
-      if d' < d
+      if d' <= d
         then return ()
-        else if (d' == d &&
-                 (IntMap.findWithDefault Nothing i (ante clg)) == Nothing)
-               then return () -- we do not need to change anything at the decision assignment
-               else do
-                 put (removeVal i clg)
-                 backtrack d
-                 return ()
+        else do
+          put (removeVal i clg)
+          backtrack d
+          return ()
 
 -- UNUSED : SWITCHES VALUE OF A VARIABLE used in normal backtracking
 switchDec :: Var -> State CLG ()
@@ -378,7 +375,7 @@ checkCLG = do
      -> do
       incrementScores cls
       backtrackLevel <- conflictAnalysis cls
-      if backtrackLevel <= 0
+      if backtrackLevel < 0
         then return () -- unsat
           -- else we want to backtrack
         else do
